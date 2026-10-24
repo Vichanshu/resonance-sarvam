@@ -274,6 +274,71 @@ export function CallRoom({
     }, [turns])
 
     useEffect(() => {
+        if (phase !== "live") return
+        let stopped = false
+        let lastWarning = ""
+        let lastAt = 0
+
+        async function look() {
+            if (stopped || busy.current || speaking) return
+            const video = document.querySelector<HTMLVideoElement>("[data-call-camera]")
+            if (!video || video.readyState < 2) return
+            let note = ""
+            const Detector = "FaceDetector" in window ? (window as unknown as { FaceDetector: new (options: { fastMode: boolean; maxDetectedFaces: number }) => { detect: (source: HTMLVideoElement) => Promise<unknown[]> } }).FaceDetector : null
+            if (Detector) {
+                try {
+                    const faces = await new Detector({ fastMode: true, maxDetectedFaces: 5 }).detect(video)
+                    if (faces.length > 1) note = "I can see more than one person. Please be alone for this interview."
+                    else if (faces.length === 0) note = "I can't see your face. Please sit where the camera can see you."
+                } catch {
+                    note = ""
+                }
+            }
+            const body = new FormData()
+            if (note) body.append("note", note)
+            else {
+                const canvas = document.createElement("canvas")
+                canvas.width = 320
+                canvas.height = 240
+                const context = canvas.getContext("2d")
+                if (!context) return
+                context.drawImage(video, 0, 0, 320, 240)
+                const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.6))
+                if (!blob) return
+                body.append("frame", blob, "frame.jpg")
+            }
+            const response = await fetch(`/api/interview/${meetingId}/vision`, { method: "POST", body })
+            const json = await response.json()
+            if (stopped || json.ok !== false || !json.agentText) return
+            if (json.agentText === lastWarning && Date.now() - lastAt < 45000) return
+            lastWarning = json.agentText
+            lastAt = Date.now()
+            const now = new Date().toISOString()
+            setTurns((current) => [...current, { id: crypto.randomUUID(), role: "AGENT", speakerName: agentName, text: json.agentText, createdAt: now }])
+            if (json.audio) {
+                busy.current = true
+                setSpeaking(true)
+                const player = new Audio(`data:audio/wav;base64,${json.audio}`)
+                await new Promise<void>((resolve) => {
+                    player.onended = () => resolve()
+                    player.onerror = () => resolve()
+                    void player.play().catch(() => resolve())
+                })
+                setSpeaking(false)
+                busy.current = false
+            }
+        }
+
+        const id = window.setInterval(() => { void look() }, 12000)
+        const first = window.setTimeout(() => { void look() }, 4000)
+        return () => {
+            stopped = true
+            window.clearInterval(id)
+            window.clearTimeout(first)
+        }
+    }, [phase, meetingId, agentName, speaking])
+
+    useEffect(() => {
         if (phase !== "live" || !durationMinutes) return
         const start = startedAt ? new Date(startedAt).getTime() : Date.now()
         const endAt = start + durationMinutes * 60 * 1000

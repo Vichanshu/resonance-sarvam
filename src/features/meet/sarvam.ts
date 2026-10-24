@@ -73,6 +73,44 @@ export async function chat(messages: ChatMessage[]) {
     throw new Error("Sarvam returned an empty reply.")
 }
 
+const VISION_PROMPT = `You watch one webcam frame from a live technical interview.
+Reply with JSON only, no markdown: {"ok":true} or {"ok":false,"message":"one short spoken sentence"}.
+Say ok:false only for a clear problem:
+- more than one person is visible
+- the candidate is not alone in the room
+- no face is visible
+- a phone is held up toward the screen
+- notes or another screen with answers are clearly being read
+The message should sound like a polite interviewer, for example: Please be alone for this interview. If the frame is a normal solo candidate, reply {"ok":true}.`
+
+export async function inspectFrame(image: Buffer) {
+    const response = await fetch(`${API}/vision`, {
+        method: "POST",
+        headers: {
+            "api-subscription-key": key(),
+            "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+            model: process.env.SARVAM_VISION_MODEL || "sarvam-vision",
+            prompt: VISION_PROMPT,
+            image: image.toString("base64"),
+        }),
+    })
+    if (response.status === 403 || response.status === 404) return null
+    if (!response.ok) return null
+    const payload = await response.json() as { message?: string; text?: string; output?: string; choices?: { message?: { content?: string } }[] }
+    const text = payload.message || payload.text || payload.output || payload.choices?.[0]?.message?.content || ""
+    const match = text.match(/\{[\s\S]*\}/)
+    if (!match) return null
+    try {
+        const parsed = JSON.parse(match[0]) as { ok?: boolean; message?: string }
+        if (parsed.ok === false && parsed.message?.trim()) return parsed.message.trim()
+    } catch {
+        return null
+    }
+    return null
+}
+
 export async function speak(text: string, language: string, speaker: string) {
     const spoken = text.replace(/[#*_`]/g, "").trim().slice(0, 1200)
     if (!spoken) throw new Error("Nothing to speak.")
