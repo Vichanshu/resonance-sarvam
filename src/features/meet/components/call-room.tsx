@@ -76,6 +76,9 @@ export function CallRoom({
     const [cameraError, setCameraError] = useState<string | null>(null)
     const [remaining, setRemaining] = useState<number | null>(null)
     const closing = useRef(false)
+    const leaveRef = useRef<() => void>(() => undefined)
+    const closeFromServerRef = useRef<(json: { ended?: boolean }) => Promise<void>>(async () => undefined)
+    const speakerBodyRef = useRef<(body: FormData) => FormData>((body) => body)
     const [muted, setMuted] = useState(false)
     const [listening, setListening] = useState(false)
     const [speaking, setSpeaking] = useState(false)
@@ -161,11 +164,11 @@ export function CallRoom({
             try {
                 const body = new FormData()
                 body.append("audio", blob, "speech.wav")
-                const response = await fetch(turnEndpoint, { method: "POST", body: speakerBody(body) })
+                const response = await fetch(turnEndpoint, { method: "POST", body: speakerBodyRef.current(body) })
                 const json = await response.json()
                 if (!response.ok) throw new Error(json.error || "The agent could not answer.")
                 if (!json.skipped) await playReply(json.userText, json.agentText, json.audio)
-                if (json.ended) await closeFromServer({ ended: true })
+                if (json.ended) await closeFromServerRef.current({ ended: true })
             } catch (error) {
                 toast.error(error instanceof Error ? error.message : "The agent could not answer.")
             } finally {
@@ -277,7 +280,7 @@ export function CallRoom({
         const tick = () => {
             const left = Math.max(0, Math.round((endAt - Date.now()) / 1000))
             setRemaining(left)
-            if (left <= 0) void leave()
+            if (left <= 0) leaveRef.current()
         }
         tick()
         const id = window.setInterval(tick, 1000)
@@ -324,13 +327,19 @@ export function CallRoom({
     }
 
     async function join() {
-        const result = await startMeetingAction(meetingId)
-        if (!result.ok) {
-            toast.error(result.error)
-            return
+        if (!share) {
+            const result = await startMeetingAction(meetingId)
+            if (!result.ok) {
+                toast.error(result.error)
+                return
+            }
         }
         setPhase("live")
         void requestOpening()
+    }
+
+    leaveRef.current = () => {
+        void leave()
     }
 
     async function closeFromServer(json: { ended?: boolean; agentText?: string; audio?: string; userText?: string }) {
@@ -363,6 +372,8 @@ export function CallRoom({
         router.push(`/meetings/${meetingId}`)
         router.refresh()
     }
+    closeFromServerRef.current = closeFromServer
+    speakerBodyRef.current = speakerBody
 
     async function leave() {
         if (closing.current) return
@@ -438,7 +449,9 @@ export function CallRoom({
                         <p className="text-sm text-muted-foreground">Lobby</p>
                         <h1 className="text-lg font-semibold tracking-tight">{meetingName}</h1>
                     </div>
-                    <Link href={`/meetings/${meetingId}`} className="text-sm text-muted-foreground hover:text-foreground">Back</Link>
+                    {!share && (
+                        <Link href={`/meetings/${meetingId}`} className="text-sm text-muted-foreground hover:text-foreground">Back</Link>
+                    )}
                 </header>
                 <div className="mx-auto flex w-full max-w-3xl flex-1 flex-col justify-center gap-6 p-6">
                     <video ref={attachCamera} data-call-camera autoPlay muted playsInline className="aspect-video w-full rounded-xl bg-muted object-cover ring-1 ring-foreground/10" />
@@ -448,7 +461,7 @@ export function CallRoom({
                             <p className="font-medium tracking-tight">{agentName} is ready</p>
                             <p className="text-sm text-muted-foreground">Your camera stays on this device. Speech goes to Sarvam.</p>
                         </div>
-                        <Button onClick={join}>Join meeting</Button>
+                        <Button onClick={join}>{share ? "Join interview" : "Join meeting"}</Button>
                     </div>
                 </div>
             </div>
