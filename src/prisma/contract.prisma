@@ -64,3 +64,102 @@ model Generation {
   @@index([orgId])
   @@index([voiceId])
 }
+
+enum MeetingStatus {
+  UPCOMING
+  ACTIVE
+  COMPLETED
+  PROCESSING
+  CANCELLED
+}
+
+enum Plan {
+  FREE
+  PRO
+}
+
+enum SpeakerRole {
+  USER
+  AGENT
+}
+
+model Agent {
+  id           String @id @default(cuid(2))
+  orgId        String
+  userId       String
+  name         String
+  instructions String
+  language     String @default("en-IN")
+  speaker      String @default("shubh")
+
+  meetings Meeting[]
+
+  createdAt DateTime @default(now())
+  updatedAt temporal.updatedAt()
+
+  @@index([orgId])
+}
+
+model Meeting {
+  id        String        @id @default(cuid(2))
+  orgId     String
+  userId    String
+  name      String
+  status    MeetingStatus @default(UPCOMING)
+  agentId   String
+  agent     Agent         @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  startedAt      DateTime?
+  endedAt        DateTime?
+  summary        String?
+  githubUrl        String?
+  resumeText       String?
+  projectContext   String?
+  jobDetails       String?
+  interviewStyle   String?
+  candidateName    String?
+  candidateDetails String?
+  durationMinutes  Int?
+
+  turns    TranscriptTurn[]
+  messages MeetingMessage[]
+
+  createdAt DateTime @default(now())
+  updatedAt temporal.updatedAt()
+
+  @@index([orgId])
+  @@index([agentId])
+  @@index([status])
+}
+
+model TranscriptTurn {
+  id          String      @id @default(cuid(2))
+  meetingId   String
+  meeting     Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  role        SpeakerRole
+  speakerName String
+  text        String
+
+  createdAt DateTime @default(now())
+
+  @@index([meetingId])
+}
+
+model MeetingMessage {
+  id        String      @id @default(cuid(2))
+  meetingId String
+  meeting   Meeting     @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  role      SpeakerRole
+  text      String
+
+  createdAt DateTime @default(now())
+
+  @@index([meetingId])
+}
+
+model OrgPlan {
+  orgId String @id
+  plan  Plan   @default(FREE)
+
+  createdAt DateTime @default(now())
+  updatedAt temporal.updatedAt()
+}

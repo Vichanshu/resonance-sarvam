@@ -18,7 +18,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton"
 import { OrganizationSwitcher, useClerk, UserButton } from "@clerk/nextjs"
 import Link from "next/link"
-import { AudioLines, Headphones, Home, LayoutGrid, LucideIcon, Settings, Volume2 } from "lucide-react"
+import { AudioLines, Bot, Headphones, Home, LayoutGrid, LucideIcon, Settings, Sparkles, Video, Volume2 } from "lucide-react"
 import { useState } from "react"
 import { usePathname } from "next/navigation"
 
@@ -104,6 +104,21 @@ export default function DashboardSidebar() {
         {
             title: "Voice cloning",
             icon: Volume2
+        },
+        {
+            title: "Meetings",
+            url: "/meetings",
+            icon: Video,
+        },
+        {
+            title: "Agents",
+            url: "/agents",
+            icon: Bot,
+        },
+        {
+            title: "Upgrade",
+            url: "/upgrade",
+            icon: Sparkles,
         },
     ];
 

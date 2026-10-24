@@ -22,7 +22,7 @@ export const metadata: Metadata = {
     default: "Resonance",
     template: "%s | Resonance",
   },
-  icons: "./logo.svg",
+  icons: "/logo.svg",
   description: "A text to speech platform",
 };
 
